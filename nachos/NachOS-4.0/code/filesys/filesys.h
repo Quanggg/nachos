@@ -46,9 +46,12 @@ class FileSystem
 public:
 	FileSystem()
 	{
-		totalFiles = 0;
 	}
-
+	~FileSystem()
+	{
+		openingFiles.clear();
+		idToName.clear();
+	}
 	bool Create(char *name)
 	{
 		int fileDescriptor = OpenForWrite(name);
@@ -67,22 +70,47 @@ public:
 			return NULL;
 		OpenFile *newFile = new OpenFile(fileDescriptor);
 		openingFiles[(int)newFile] = newFile;
+		char *fileName = new char[strlen(name) + 1];
+		strcpy(fileName, name);
+		idToName[(int)newFile] = fileName;
 		return newFile;
 	}
 	bool Close(int fileID)
 	{
 		if (openingFiles.find(fileID) == openingFiles.end())
 			return false;
-		delete openingFiles[fileID];
+		// map erase auto delete pointer
 		openingFiles.erase(fileID);
+		idToName.erase(fileID);
 		return true;
+	}
+	int Seek(int pos, int fileID)
+	{
+		if (openingFiles.find(fileID) == openingFiles.end())
+			return -1;
+		OpenFile *openFile = openingFiles[fileID];
+		int fileSize = openFile->Length();
+		cerr << "fileSize: " << fileSize;
+		if (pos == -1)
+			return openFile->Seek(fileSize);
+		else if (pos > fileSize)
+			return -1;
+		return openFile->Seek(pos);
+	}
+	bool IsOpen(char *name)
+	{
+		map<int, char *>::iterator it;
+
+		for (it = idToName.begin(); it != idToName.end(); it++)
+			if (strcmp(it->second, name) == 0)
+				return true;
+		return false;
 	}
 	bool Remove(char *name) { return Unlink(name) == 0; }
 
 private:
-	map<char *, int> fileIDs;
 	map<int, OpenFile *> openingFiles;
-	int totalFiles;
+	map<int, char *> idToName;
 };
 
 #else // FILESYS

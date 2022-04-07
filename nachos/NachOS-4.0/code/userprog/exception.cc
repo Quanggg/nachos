@@ -98,7 +98,7 @@ void ExceptionHandler(ExceptionType which)
 {
 	int type = kernel->machine->ReadRegister(2); // SYSTEM CALL type
 
-	DEBUG(dbgSys, "Received Exception " << which << " type: " << type << "\n");
+	DEBUG(dbgSys, "\nReceived Exception " << which << " type: " << type << "\n");
 	switch (which)
 	{
 	case NoException:
@@ -359,28 +359,14 @@ void ExceptionHandler(ExceptionType which)
 		}
 		case SC_Close:
 		{
-			// get openFileId
-			OpenFileID openFileId = kernel->machine->ReadRegister(4);
+			// get openFileID
+			OpenFileID openFileID = kernel->machine->ReadRegister(4);
 
-			int status;
-			// = kernel->fileSystem->Close(openFileId);
-			DEBUG(dbgSys, "Closing file at: " << openFileId);
-			try
-			{
-				// call destructor to close file
-				DEBUG(dbgSys, "Close successfully");
-				OpenFile *fileID = (OpenFile *)openFileId;
-				fileID->~OpenFile();
-				status = 1;
-			}
-			catch (const std::exception &e)
-			{
-				DEBUG(dbgSys, "Close failed");
-				status = 0;
-			}
+			DEBUG(dbgSys, "Closing file at: " << openFileID);
+			bool status = kernel->fileSystem->Close(openFileID);
+			DEBUG(dbgSys, "Close " << (status ? "successfully" : "failed"));
 
-			// return OpenFileID
-			kernel->machine->WriteRegister(2, status);
+			kernel->machine->WriteRegister(2, status ? 1 : -1);
 
 			increasePC();
 
@@ -393,52 +379,67 @@ void ExceptionHandler(ExceptionType which)
 			// get buffer address, size and OpenFileID
 			int buffer = kernel->machine->ReadRegister(4);
 			int size = kernel->machine->ReadRegister(5);
-			int openFileID = kernel->machine->ReadRegister(6);
+			OpenFileID openFileID = kernel->machine->ReadRegister(6);
 
-			// create char* for kernel space to store file content
-			char *str = new char[size + 1];
-			int numRead;
-
-			if (openFileID == _ConsoleInput)
+			int numRead = 0;
+			if (size < 0)
 			{
-				DEBUG(dbgSys, "Reading at ConsoleInput");
-				// read from console
-				const int LENGTH_LIMIT = 100;
-				// check if the length is valid
-				if (size > LENGTH_LIMIT)
-				{
-					DEBUG(dbgSys, "String length is not valid. Exceeds " << LENGTH_LIMIT);
-					SysHalt();
-				}
-
-				// read string from console and save it to str
-				int i;
-				for (i = 0; i < size; i++)
-				{
-					str[i] = kernel->synchConsoleIn->GetChar();
-					if (str[i] == '\n')
-						break;
-				}
-				str[i + 1] = '\0';
-				numRead = i;
-				// bring string from kernalspace to userspace
+				cerr << "ERR: "
+						 << "Read size cannot be negative\n";
 			}
 			else
 			{
-				OpenFile *fileID = (OpenFile *)openFileID;
-				// read from file
-				DEBUG(dbgSys, "Reading file at: " << fileID);
-				numRead = fileID->Read(str, size);
+				// create char* for kernel space to store file content
+				char *str = new char[size + 1];
+
+				if (openFileID == _ConsoleInput)
+				{
+					DEBUG(dbgSys, "Reading at ConsoleInput");
+					// read from console
+					const int LENGTH_LIMIT = 100;
+					// check if the length is valid
+					if (size > LENGTH_LIMIT)
+					{
+						DEBUG(dbgSys, "String length is not valid. Exceeds " << LENGTH_LIMIT);
+						SysHalt();
+					}
+
+					// read string from console and save it to str
+					int i;
+					for (i = 0; i < size; i++)
+					{
+						str[i] = kernel->synchConsoleIn->GetChar();
+						if (str[i] == '\n')
+							break;
+					}
+					str[i + 1] = '\0';
+					numRead = i;
+					// bring string from kernalspace to userspace
+				}
+				else if (openFileID != _ConsoleOutput)
+				{
+					OpenFile *fileID = (OpenFile *)openFileID;
+					// read from file
+					DEBUG(dbgSys, "Reading file at: " << openFileID);
+					numRead = fileID->Read(str, size);
+				}
+				else
+				{
+					// user try to read from ConsoleOutput
+					DEBUG(dbgSys, "Reading at ConsoleOutput");
+					cerr << "ERR: "
+							 << "Not allow to read at ConsoleOutput\n";
+					str[0] = '\0';
+				}
+
+				// move read string to user space
+				kernelToUser(str, buffer);
+				delete[] str;
 			}
 			DEBUG(dbgSys, "Total bytes read: " << numRead);
-
-			// move read string to user space
-			kernelToUser(str, buffer);
-
 			// return total bytes read
 			kernel->machine->WriteRegister(2, numRead);
 
-			delete[] str;
 			increasePC();
 
 			return;
@@ -450,33 +451,49 @@ void ExceptionHandler(ExceptionType which)
 			// get buffer address, size and OpenFileID
 			int buffer = kernel->machine->ReadRegister(4);
 			int size = kernel->machine->ReadRegister(5);
-			int openFileId = kernel->machine->ReadRegister(6);
+			OpenFileID openFileID = kernel->machine->ReadRegister(6);
 
-			// bring buffer from user space to kernel space
-			char *str = userToKernel(buffer);
-			int numWritten;
-			if (openFileId == _ConsoleOutput)
+			int numWritten = 0;
+			if (size < 0)
 			{
-				DEBUG(dbgSys, "Writing at ConsoleOutput");
-				// write to console
-				int i;
-				for (i = 0; i < strlen(str); i++)
-					kernel->synchConsoleOut->PutChar(str[i]);
-				numWritten = i;
+				cerr << "ERR: "
+						 << "Write size cannot be negative\n";
 			}
 			else
 			{
-				OpenFile *fileID = (OpenFile *)openFileId;
-				// write to file
-				DEBUG(dbgSys, "Writing file at: " << fileID);
-				numWritten = fileID->Write(str, strlen(str) >= size ? size : strlen(str));
+				// bring buffer from user space to kernel space
+				char *str = userToKernel(buffer);
+				int len = strlen(str) <= size ? strlen(str) : size;
+				if (openFileID == _ConsoleOutput)
+				{
+					// write to console output
+					DEBUG(dbgSys, "Writing at ConsoleOutput");
+					int i;
+					for (i = 0; i < len; i++)
+						kernel->synchConsoleOut->PutChar(str[i]);
+					numWritten = i;
+				}
+				else if (openFileID != _ConsoleInput)
+				{
+					OpenFile *fileID = (OpenFile *)openFileID;
+					// write to file
+					DEBUG(dbgSys, "Writing file at: " << fileID);
+					numWritten = fileID->Write(str, len);
+				}
+				else
+				{
+					// write to console input
+					DEBUG(dbgSys, "Writing at ConsoleInput");
+					cerr << "ERR: "
+							 << "Not allow to write to ConsoleInput\n";
+				}
+				delete[] str;
 			}
-			DEBUG(dbgSys, "Total bytes written: " << numWritten);
 
+			DEBUG(dbgSys, "Total bytes written: " << numWritten);
 			// return total bytes written
 			kernel->machine->WriteRegister(2, numWritten);
 
-			delete[] str;
 			increasePC();
 
 			return;
@@ -485,19 +502,65 @@ void ExceptionHandler(ExceptionType which)
 		}
 		case SC_Seek:
 		{
-			// get file
-			OpenFile *fileID = (OpenFile *)kernel->machine->ReadRegister(4);
+			// get pos, fileID
+			int pos = kernel->machine->ReadRegister(4);
+			OpenFileID openFileID = kernel->machine->ReadRegister(5);
 
-			DEBUG(dbgSys, "Closing file at: " << fileID);
+			int seekPos = -1;
+			if (pos < -1)
+			{
+				// invalid pos
+				DEBUG(dbgSys, "pos < -1");
+				cerr << "ERR: "
+						 << "Invalid Seek position: position < -1";
+			}
+			else if (openFileID != _ConsoleInput && openFileID != _ConsoleOutput)
+			{
+				DEBUG(dbgSys, "Seeking postion " << pos << " at " << openFileID);
+				// seek file
+				seekPos = kernel->fileSystem->Seek(pos, openFileID);
+				DEBUG(dbgSys, "Seek " << (seekPos != -1 ? "successfully" : "failed"));
+			}
+			else
+			{
+				// seek on console
+				DEBUG(dbgSys, "Cannot call Seek on Console");
+				cerr << "ERR: "
+						 << "Seek on Console is not allow";
+			}
 
-			DEBUG(dbgSys, "Close " << (fileID != NULL ? "successfully" : "failed"));
-			// delete to close file
-			if (fileID != NULL)
-				delete fileID;
+			// return seekPos
+			kernel->machine->WriteRegister(2, seekPos);
 
-			int status = fileID != NULL ? 1 : -1;
-			// return OpenFileID
-			kernel->machine->WriteRegister(2, status);
+			increasePC();
+
+			return;
+			ASSERTNOTREACHED();
+			break;
+		}
+		case SC_Remove:
+		{
+			// address of string
+			int str = kernel->machine->ReadRegister(4);
+			// bring string from userspace to kernelspace
+			char *fileName = userToKernel(str);
+
+			DEBUG(dbgSys, "Removing file " << fileName);
+			bool status;
+			if (kernel->fileSystem->IsOpen(fileName))
+			{
+				// check file is open
+				DEBUG(dbgSys, "File " << fileName << " is opening");
+				status = false;
+			}
+			else
+				// remove file
+				status = kernel->fileSystem->Remove(fileName);
+
+			DEBUG(dbgSys, "Remove " << (status ? "successfully" : "failed"));
+
+			// return status
+			kernel->machine->WriteRegister(2, status ? 1 : -1);
 
 			increasePC();
 

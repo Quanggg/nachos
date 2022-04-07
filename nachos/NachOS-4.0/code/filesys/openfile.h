@@ -63,7 +63,10 @@ public:
 		currentOffset += numWritten;
 		return numWritten;
 	}
-
+	int Seek(int pos)
+	{
+		return currentOffset = pos;
+	}
 	int Length()
 	{
 		Lseek(file, 0, 2);

@@ -8,19 +8,11 @@
 int main()
 {
   char *s;
-  // PrintNum(ReadNum());
-  // PrintChar(ReadChar());
-  // PrintChar(300);
-  // PrintNum(RandomNum());
-  // char *s;
-  // int len = 10;
-  // ReadString(s, len);
-  // PrintString("");
-  OpenFileID file = Open("321.x");
-  // Close(_ConsoleOutput);
-  Read(s, 100, file);
-  // Write("Quang Le", 100, _ConsoleOutput);
-  PrintString(s);
-  Close(file);
+  // OpenFileID file = Open("321.x");
+  // Seek(-2, _ConsoleInput);
+  // Close(file);
+  // Create("321.x");
+  // Open("321.x");
+  // Remove("3211.x");
   Halt();
 }
