@@ -5,9 +5,12 @@
 
 #include "syscall.h"
 
-int main()
+int main(int argc, char **argv)
 {
   char *s;
+  PrintNum(argc);
+  // PrintNum(argc);
+  // PrintString(argv[0]);
   // OpenFileID file = Open("321.x");
   // Seek(-2, _ConsoleInput);
   // Close(file);

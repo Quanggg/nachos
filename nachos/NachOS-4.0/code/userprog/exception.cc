@@ -277,10 +277,15 @@ void ExceptionHandler(ExceptionType which)
 			}
 
 			char *buffer = new char[len + 1];
+			int i;
 			// read string from console and save it to buffer
-			for (int i = 0; i < len; i++)
+			for (i = 0; i < len; i++)
+			{
 				buffer[i] = kernel->synchConsoleIn->GetChar();
-			buffer[len] = '\0';
+				if (buffer[i] == '\n')
+					break;
+			}
+			buffer[i + 1] = '\0';
 			// bring string from kernalspace to userspace
 			kernelToUser(buffer, str);
 
