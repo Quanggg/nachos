@@ -8,14 +8,9 @@
 int main(int argc, char **argv)
 {
   char *s;
-  PrintNum(argc);
-  // PrintNum(argc);
-  // PrintString(argv[0]);
-  // OpenFileID file = Open("321.x");
-  // Seek(-2, _ConsoleInput);
-  // Close(file);
-  // Create("321.x");
-  // Open("321.x");
-  // Remove("3211.x");
+  Create("test.txt");
+  Write("Quang Le Chau Nhat\n", 100, Open("test.txt"));
+  Read(s, 100, Open("test.txt"));
+  PrintString(s);
   Halt();
 }

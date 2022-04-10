@@ -84,13 +84,24 @@ public:
 		idToName.erase(fileID);
 		return true;
 	}
+	int Read(char *into, int numBytes, int fileID)
+	{
+		if (openingFiles.find(fileID) == openingFiles.end())
+			return 0;
+		return openingFiles[fileID]->Read(into, numBytes);
+	}
+	int Write(char *from, int numBytes, int fileID)
+	{
+		if (openingFiles.find(fileID) == openingFiles.end())
+			return 0;
+		return openingFiles[fileID]->Write(from, numBytes);
+	}
 	int Seek(int pos, int fileID)
 	{
 		if (openingFiles.find(fileID) == openingFiles.end())
 			return -1;
 		OpenFile *openFile = openingFiles[fileID];
 		int fileSize = openFile->Length();
-		cerr << "fileSize: " << fileSize;
 		if (pos == -1)
 			return openFile->Seek(fileSize);
 		else if (pos > fileSize)

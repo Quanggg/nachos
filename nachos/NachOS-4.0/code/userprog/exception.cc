@@ -346,10 +346,11 @@ void ExceptionHandler(ExceptionType which)
 			int str = kernel->machine->ReadRegister(4);
 			// bring string from userspace to kernelspace
 			char *fileName = userToKernel(str);
-
+			// handle \n at the end of file name
+			fileName[strlen(fileName) - 1] = '\0';
 			DEBUG(dbgSys, "Opening file: " << fileName);
 			// open file
-			OpenFile *fileID = kernel->fileSystem->Open(fileName);
+			OpenFile *fileID = fileName != NULL ? kernel->fileSystem->Open(fileName) : NULL;
 			DEBUG(dbgSys, "Open " << (fileID != NULL ? "successfully" : "failed"));
 
 			// return OpenFileID
@@ -423,10 +424,10 @@ void ExceptionHandler(ExceptionType which)
 				}
 				else if (openFileID != _ConsoleOutput)
 				{
-					OpenFile *fileID = (OpenFile *)openFileID;
+					// OpenFile *fileID = (OpenFile *)openFileID;
 					// read from file
 					DEBUG(dbgSys, "Reading file at: " << openFileID);
-					numRead = fileID->Read(str, size);
+					numRead = kernel->fileSystem->Read(str, size, openFileID);
 				}
 				else
 				{
@@ -480,10 +481,10 @@ void ExceptionHandler(ExceptionType which)
 				}
 				else if (openFileID != _ConsoleInput)
 				{
-					OpenFile *fileID = (OpenFile *)openFileID;
+					// OpenFile *fileID = (OpenFile *)openFileID;
 					// write to file
-					DEBUG(dbgSys, "Writing file at: " << fileID);
-					numWritten = fileID->Write(str, len);
+					DEBUG(dbgSys, "Writing file at: " << openFileID);
+					numWritten = kernel->fileSystem->Write(str, len, openFileID);
 				}
 				else
 				{
